@@ -13,6 +13,20 @@ class KojiroMike_Couchbase_Cache implements Zend_Cache_Backend_ExtendedInterface
 {
     /** @var Couchbase */
     protected $couchbase;
+    /**
+     * @var array
+     * @see Zend_Cache_Backend_ExtendedInterface::getCapabilities
+     *
+     * This is the todo list!
+     */
+    protected $capabilities = [
+        'automatic_cleaning' => false,
+        'tags' => false,
+        'expired_read' => false,
+        'priority' => false,
+        'infinite_lifetime' => false,
+        'get_list' => false,
+    ];
 
     /**
      * Construct Zend_Cache Couchbase Backend
@@ -252,7 +266,7 @@ class KojiroMike_Couchbase_Cache implements Zend_Cache_Backend_ExtendedInterface
      */
     public function getCapabilities()
     {
-        throw new BadMethodCallException('Not Implemented');
+        return $this->capabilities;
     }
 
     /**
