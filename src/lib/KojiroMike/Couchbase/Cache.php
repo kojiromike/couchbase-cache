@@ -8,11 +8,28 @@
  * @license   http://opensource.org/licenses/MIT MIT License
  * @author    Michael A. Smith
  * @see       http://developer.couchbase.com/documentation/server/4.0/sdks/php-2.0/php-intro.html
+ * @see       http://docs.couchbase.com/sdk-api/couchbase-php-client-2.0.7
  */
 class KojiroMike_Couchbase_Cache implements Zend_Cache_Backend_ExtendedInterface
 {
-    /** @var Couchbase */
+    /**
+     * Format flag constants
+     * I can't find how these are actually set in the library.
+     *
+     * @see http://developer.couchbase.com/documentation/server/4.0/developer-guide/transcoders.html#concept_bdb_smb_bt__table_wrc_2nb_bt
+     */
+    const COUCHBASE_FORMAT_FLAGS_JSON = 33554432; // 0x02 << 24
+    const COUCHBASE_FORMAT_FLAGS_UTF8 = 67108864; // 0x04 << 24
+    const COUCHBASE_FORMAT_FLAGS_RAW = 50331648; // 0x03 << 24
+    const COUCHBASE_FORMAT_FLAGS_PRIVATE = 16777216; // 0x01 << 24
+
+    const DOCUMENT_ID_DELIMITER = ' ';
+
+    /** @var CouchbaseBucket */
     protected $couchbase;
+    /** @var CouchbaseBucket */
+    protected $tagBucket;
+
     /**
      * @var array
      * @see Zend_Cache_Backend_ExtendedInterface::getCapabilities
@@ -22,6 +39,7 @@ class KojiroMike_Couchbase_Cache implements Zend_Cache_Backend_ExtendedInterface
     protected $capabilities = [
         'automatic_cleaning' => false,
         'tags' => false,
+        // @see http://developer.couchbase.com/documentation/server/4.0/developer-guide/expiry.html
         'expired_read' => false,
         'priority' => false,
         'infinite_lifetime' => false,
@@ -29,19 +47,42 @@ class KojiroMike_Couchbase_Cache implements Zend_Cache_Backend_ExtendedInterface
     ];
 
     /**
+     * @var array
+     *
+     * Default options
+     */
+    protected $defaultOptions = [
+        // An optional callable that takes a dsn, username and password and returns a CouchbaseCluster
+        'cluster_factory' => null,
+        // The dsn string to connect to the CouchbaseCluster
+        'dsn' => 'http://127.0.0.1/',
+        // The username to connect to the CouchbaseCluster
+        'username' => '',
+        // The password to connect to the CouchbaseCluster
+        'password' => '',
+        // The name of the CouchbaseBucket to open
+        'bucket_name' => 'default',
+        // The password to the CouchbaseBucket
+        'bucket_password' => '',
+        // The name of the bucket to store the tag index in
+        'tag_bucket' => 'tags',
+        // The password to the tag index bucket
+        'tag_bucket_password' => '',
+    ];
+
+
+    /**
      * Construct Zend_Cache Couchbase Backend
      *
-     * @param array
+     * @param array $options
+     * @see self::defaultOptions
      */
     public function __construct(array $options = [])
     {
-        $this->couchbase = new Couchbase(
-            $options['hosts'],
-            $options['user'],
-            $options['password'],
-            $options['bucket'],
-            $options['persistent']
-        );
+        $options = array_merge($this->defaultOptions, $options);
+        $couchbaseCluster = $this->getCluster($options);
+        $this->couchbase = $couchbaseCluster->openBucket($options['bucket'], $options['bucket_password']);
+        $this->tagBucket = $couchbaseCluster->openBucket($options['tag_bucket'], $options['tag_bucket_password']);
     }
 
     /**
@@ -59,6 +100,7 @@ class KojiroMike_Couchbase_Cache implements Zend_Cache_Backend_ExtendedInterface
      *
      * Note : return value is always "string" (unserialization is done by the core not by the backend)
      *
+     * @see http://docs.couchbase.com/sdk-api/couchbase-php-client-2.0.7/classes/CouchbaseBucket.html#method_get
      * @param  string  $id                     Cache id
      * @param  boolean $doNotTestCacheValidity If set to true, the cache validity won't be tested
      * @return string|false cached datas
@@ -67,7 +109,7 @@ class KojiroMike_Couchbase_Cache implements Zend_Cache_Backend_ExtendedInterface
     {
         $couchbase = $this->couchbase;
         try {
-            return $this->decode($couchbase->get($id));
+            return $couchbase->get($id);
         } catch (CouchbaseNoSuchKeyException $e) {
             return false;
         }
@@ -91,6 +133,7 @@ class KojiroMike_Couchbase_Cache implements Zend_Cache_Backend_ExtendedInterface
      * Note : $data is always "string" (serialization is done by the
      * core not by the backend)
      *
+     * @see http://docs.couchbase.com/sdk-api/couchbase-php-client-2.0.7/classes/CouchbaseBucket.html#method_upsert
      * @param  string $data            Datas to cache
      * @param  string $id              Cache id
      * @param  array $tags             Array of strings, the cache record will be tagged by each string entry
@@ -100,16 +143,26 @@ class KojiroMike_Couchbase_Cache implements Zend_Cache_Backend_ExtendedInterface
     public function save($data, $id, array $tags = [], $specificLifetime = false)
     {
         $couchbase = $this->couchbase;
+        $options = [];
+        if ($specificLifetime) {
+            $options['expiry'] = $this->convertLifetimeToExpiry($specificLifetime);
+        }
+        $options['flags'] = self::COUCHBASE_FORMAT_FLAGS_RAW;
+        $couchbase->upsert($id, $data, $options);
+        $this->tagId($id, $tags);
+        return true;
     }
 
     /**
      * Remove a cache record
      *
+     * @see http://docs.couchbase.com/sdk-api/couchbase-php-client-2.0.7/classes/CouchbaseBucket.html#method_remove
      * @param  string $id Cache id
      * @return boolean True if no problem
      */
     public function remove($id) {
         $this->couchbase->remove($id);
+        return true;
     }
 
     /**
@@ -148,7 +201,7 @@ class KojiroMike_Couchbase_Cache implements Zend_Cache_Backend_ExtendedInterface
      */
     public function getIds()
     {
-        throw new BadMethodCallException('Not Implemented: ' . __METHOD__);
+        return $this->getIdsMatchingTags(['_all']);
     }
 
     /**
@@ -158,7 +211,7 @@ class KojiroMike_Couchbase_Cache implements Zend_Cache_Backend_ExtendedInterface
      */
     public function getTags()
     {
-        throw new BadMethodCallException('Not Implemented: ' . __METHOD__);
+        return $this->getIdsMatchingTags(['_tags']);
     }
 
     /**
@@ -171,7 +224,8 @@ class KojiroMike_Couchbase_Cache implements Zend_Cache_Backend_ExtendedInterface
      */
     public function getIdsMatchingTags(array $tags = [])
     {
-        throw new BadMethodCallException('Not Implemented: ' . __METHOD__);
+        $ids = array_map([$this, 'getIdsMatchingAnyTag'], array_chunk($tags, 1));
+        return call_user_func_array('array_intersect', $ids);
     }
 
     /**
@@ -184,20 +238,28 @@ class KojiroMike_Couchbase_Cache implements Zend_Cache_Backend_ExtendedInterface
      */
     public function getIdsNotMatchingTags(array $tags = [])
     {
-        throw new BadMethodCallException('Not Implemented: ' . __METHOD__);
+        $bucket = $this->tagBucket;
+        return array_diff($this->getIds(), $this->getIdsMatchingTags($tags));
     }
 
     /**
      * Return an array of stored cache ids which match any given tags
      *
-     * In case of multiple tags, a logical AND is made between tags
+     * In case of multiple tags, a logical OR is made between tags
      *
      * @param array $tags array of tags
      * @return array array of any matching cache ids (string)
      */
     public function getIdsMatchingAnyTags(array $tags = [])
     {
-        throw new BadMethodCallException('Not Implemented: ' . __METHOD__);
+        $bucket = $this->tagBucket;
+        $allIdsString = $bucket->get($tags);
+        // Note: Given many reads, few writes
+        // (When the time comes to deal with uniqueness)
+        // Then uniquify the ids in self::tagId
+        // And not here
+        $allIds = explode(self::DOCUMENT_ID_DELIMITER, $allIdsString);
+        return $allIds;
     }
 
     /**
@@ -258,17 +320,6 @@ class KojiroMike_Couchbase_Cache implements Zend_Cache_Backend_ExtendedInterface
     }
 
     /**
-     * Decode data in the cache if it's compressed or encoded.
-     *
-     * @param string
-     * @return string
-     */
-    protected function decode($data)
-    {
-        return $data;
-    }
-
-    /**
      * Remove all cache entries
      * Zend_Cache::CLEANING_MODE_ALL
      *
@@ -324,5 +375,39 @@ class KojiroMike_Couchbase_Cache implements Zend_Cache_Backend_ExtendedInterface
     protected function cleanAnyTags(array $tags = [])
     {
         throw new BadMethodCallException('Not Implemented: ' . __METHOD__);
+    }
+
+    /**
+     * Associate a document with some tags.
+     *
+     * @see http://docs.couchbase.com/sdk-api/couchbase-php-client-2.0.7/classes/CouchbaseBucket.html#method_append
+     * @param string $id
+     * @param array $tags
+     * @return self
+     */
+    protected function tagId($id, array $tags)
+    {
+        $bucket = $this->tagBucket;
+        // Store the tag itself in the document for listing used tags.
+        $bucket->append('_tags', implode(self::DOCUMENT_ID_DELIMITER, $tags) . self::DOCUMENT_ID_DELIMITER);
+        $tags[] = '_all'; // Always add the id to the _all tag.
+        $bucket->append($tags, $id . self::DOCUMENT_ID_DELIMITER);
+        return $this;
+    }
+
+    /**
+     * Enable injecting the CouchbaseCluster implementation.
+     *
+     * @param array $options
+     * @see self::__construct
+     * @return CouchbaseCluster
+     */
+    protected function getCluster(array $options = [])
+    {
+        $clusterFactory = is_callable($options['cluster_factory']) ? $options['cluster_factory'] :
+            function($dsn, $user, $pass) {
+                return new CouchbaseCluster($dsn, $user, $pass);
+            };
+        return $clusterFactory($options['dsn'], $options['username'], $options['password']);
     }
 }
