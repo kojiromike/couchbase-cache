@@ -1,0 +1,10 @@
+{
+    "name": "kojiromike/couchbase-cache",
+    "description": "A Couchbase Zend_Cache backend with full support for tags",
+    "license": "MIT",
+    "authors": [{"name": "Michael A. Smith", "email": "michael@smith-li.com"}],
+    "type": "magento-module",
+    "suggest": {
+        "magento-hackathon/magento-composer-installer": "Composer installer for Magento modules"
+    }
+}
