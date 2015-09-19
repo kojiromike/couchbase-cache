@@ -51,7 +51,7 @@ class KojiroMike_Couchbase_Cache implements Zend_Cache_Backend_ExtendedInterface
      */
     public function setDirectives(array $directives = [])
     {
-        throw new BadMethodCallException('Not Implemented');
+        throw new BadMethodCallException('Not Implemented: ' . __METHOD__);
     }
 
     /**
@@ -132,25 +132,13 @@ class KojiroMike_Couchbase_Cache implements Zend_Cache_Backend_ExtendedInterface
     public function clean($mode = Zend_Cache::CLEANING_MODE_ALL, array $tags = [])
     {
         switch($mode) {
-            case Zend_Cache::CLEANING_MODE_ALL:
-                $this->cleanAll();
-                break;
-            case Zend_Cache::CLEANING_MODE_OLD:
-                $this->cleanExpired();
-                break;
-            case Zend_Cache::CLEANING_MODE_MATCHING_TAG:
-                $this->cleanTags($tags);
-                break;
-            case Zend_Cache::CLEANING_MODE_NOT_MATCHING_TAG:
-                $this->cleanOtherTags($tags);
-                break;
-            case Zend_Cache::CLEANING_MODE_MATCHING_ANY_TAG:
-                $this->cleanAllTags();
-                break;
-            default:
-                throw new BadMethodCallException('Not Implemented');
+            case Zend_Cache::CLEANING_MODE_ALL: return $this->cleanAll();
+            case Zend_Cache::CLEANING_MODE_OLD: return $this->cleanExpired();
+            case Zend_Cache::CLEANING_MODE_MATCHING_TAG: return $this->cleanTags($tags);
+            case Zend_Cache::CLEANING_MODE_NOT_MATCHING_TAG: return $this->cleanOtherTags($tags);
+            case Zend_Cache::CLEANING_MODE_MATCHING_ANY_TAG: return $this->cleanAllTags();
         }
-        return true;
+        throw new BadMethodCallException('Unexpected parameters to ' . __METHOD__);
     }
 
     /**
@@ -160,7 +148,7 @@ class KojiroMike_Couchbase_Cache implements Zend_Cache_Backend_ExtendedInterface
      */
     public function getIds()
     {
-        throw new BadMethodCallException('Not Implemented');
+        throw new BadMethodCallException('Not Implemented: ' . __METHOD__);
     }
 
     /**
@@ -170,7 +158,7 @@ class KojiroMike_Couchbase_Cache implements Zend_Cache_Backend_ExtendedInterface
      */
     public function getTags()
     {
-        throw new BadMethodCallException('Not Implemented');
+        throw new BadMethodCallException('Not Implemented: ' . __METHOD__);
     }
 
     /**
@@ -183,7 +171,7 @@ class KojiroMike_Couchbase_Cache implements Zend_Cache_Backend_ExtendedInterface
      */
     public function getIdsMatchingTags(array $tags = [])
     {
-        throw new BadMethodCallException('Not Implemented');
+        throw new BadMethodCallException('Not Implemented: ' . __METHOD__);
     }
 
     /**
@@ -196,7 +184,7 @@ class KojiroMike_Couchbase_Cache implements Zend_Cache_Backend_ExtendedInterface
      */
     public function getIdsNotMatchingTags(array $tags = [])
     {
-        throw new BadMethodCallException('Not Implemented');
+        throw new BadMethodCallException('Not Implemented: ' . __METHOD__);
     }
 
     /**
@@ -209,7 +197,7 @@ class KojiroMike_Couchbase_Cache implements Zend_Cache_Backend_ExtendedInterface
      */
     public function getIdsMatchingAnyTags(array $tags = [])
     {
-        throw new BadMethodCallException('Not Implemented');
+        throw new BadMethodCallException('Not Implemented: ' . __METHOD__);
     }
 
     /**
@@ -219,7 +207,7 @@ class KojiroMike_Couchbase_Cache implements Zend_Cache_Backend_ExtendedInterface
      */
     public function getFillingPercentage()
     {
-        throw new BadMethodCallException('Not Implemented');
+        throw new BadMethodCallException('Not Implemented: ' . __METHOD__);
     }
 
     /**
@@ -235,7 +223,7 @@ class KojiroMike_Couchbase_Cache implements Zend_Cache_Backend_ExtendedInterface
      */
     public function getMetadatas($id)
     {
-        throw new BadMethodCallException('Not Implemented');
+        throw new BadMethodCallException('Not Implemented: ' . __METHOD__);
     }
 
     /**
@@ -247,7 +235,7 @@ class KojiroMike_Couchbase_Cache implements Zend_Cache_Backend_ExtendedInterface
      */
     public function touch($id, $extraLifetime)
     {
-        throw new BadMethodCallException('Not Implemented');
+        throw new BadMethodCallException('Not Implemented: ' . __METHOD__);
     }
 
     /**
@@ -278,5 +266,63 @@ class KojiroMike_Couchbase_Cache implements Zend_Cache_Backend_ExtendedInterface
     protected function decode($data)
     {
         return $data;
+    }
+
+    /**
+     * Remove all cache entries
+     * Zend_Cache::CLEANING_MODE_ALL
+     *
+     * @return bool true if no problem
+     */
+    protected function cleanAll()
+    {
+        throw new BadMethodCallException('Not Implemented: ' . __METHOD__);
+    }
+
+    /**
+     * Remove too old cache entries
+     * Zend_Cache::CLEANING_MODE_OLD
+     *
+     * @return boolean true if no problem
+     */
+    protected function cleanExpired()
+    {
+        throw new BadMethodCallException('Not Implemented: ' . __METHOD__);
+    }
+
+    /**
+     * Remove cache entries matching all given tags
+     * Zend_Cache::CLEANING_MODE_MATCHING_TAG
+     *
+     * @param  array  $tags Array of tags
+     * @return boolean true if no problem
+     */
+    protected function cleanAllTags(array $tags = [])
+    {
+        throw new BadMethodCallException('Not Implemented: ' . __METHOD__);
+    }
+
+    /**
+     * Remove cache entries not matching one of the given tags
+     * Zend_Cache::CLEANING_MODE_NOT_MATCHING_TAG
+     *
+     * @param  array  $tags Array of tags
+     * @return boolean true if no problem
+     */
+    protected function cleanNotTags(array $tags = [])
+    {
+        throw new BadMethodCallException('Not Implemented: ' . __METHOD__);
+    }
+
+    /**
+     * Remove cache entries matching any given tags
+     * Zend_Cache::CLEANING_MODE_MATCHING_ANY_TAG
+     *
+     * @param  array  $tags Array of tags
+     * @return boolean true if no problem
+     */
+    protected function cleanAnyTags(array $tags = [])
+    {
+        throw new BadMethodCallException('Not Implemented: ' . __METHOD__);
     }
 }
