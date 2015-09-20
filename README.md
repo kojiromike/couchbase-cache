@@ -6,4 +6,6 @@ Quick Notes:
 
 - `Zend_Cache_Backend_ExtendedInterface` implies tagging support. Couchbase is pretty clear that index lookups are significantly faster than queries, so to avoid having to query for tags and ids I'm using a second bucket just for tag and metadata. That's where the list of document ids exists.
 - Lots of functions haven't been implemented yet.
-- Where possible, I'm linking to relevant documentation within the code itself. 
+- Where possible, I'm linking to relevant documentation within the code itself.
+
+Please see the [issues section in GitHub](https://github.com/kojiromike/couchbase-cache/issues) for the list of open issues.
