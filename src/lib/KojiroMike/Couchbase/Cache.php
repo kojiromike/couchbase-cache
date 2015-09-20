@@ -328,7 +328,9 @@ class KojiroMike_Couchbase_Cache implements Zend_Cache_Backend_ExtendedInterface
      */
     protected function cleanAll()
     {
-        throw new BadMethodCallException('Not Implemented: ' . __METHOD__);
+        $this->couchbase->manager->flush();
+        $this->tagBucket->manager->flush();
+        return true;
     }
 
     /**
@@ -351,7 +353,9 @@ class KojiroMike_Couchbase_Cache implements Zend_Cache_Backend_ExtendedInterface
      */
     protected function cleanAllTags(array $tags = [])
     {
-        throw new BadMethodCallException('Not Implemented: ' . __METHOD__);
+        $ids = $this->getIdsMatchingTags($tags);
+        $this->couchbase->remove($ids);
+        return true;
     }
 
     /**
@@ -363,7 +367,9 @@ class KojiroMike_Couchbase_Cache implements Zend_Cache_Backend_ExtendedInterface
      */
     protected function cleanNotTags(array $tags = [])
     {
-        throw new BadMethodCallException('Not Implemented: ' . __METHOD__);
+        $ids = $this->getIdsNotMatchingTags($tags);
+        $this->couchbase->remove($ids);
+        return true;
     }
 
     /**
@@ -375,7 +381,9 @@ class KojiroMike_Couchbase_Cache implements Zend_Cache_Backend_ExtendedInterface
      */
     protected function cleanAnyTags(array $tags = [])
     {
-        throw new BadMethodCallException('Not Implemented: ' . __METHOD__);
+        $ids = $this->getIdsMatchingAnyTags($tags);
+        $this->couchbase->remove($ids);
+        return true;
     }
 
     /**
