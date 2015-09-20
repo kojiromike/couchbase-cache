@@ -411,4 +411,15 @@ class KojiroMike_Couchbase_Cache implements Zend_Cache_Backend_ExtendedInterface
             };
         return $clusterFactory($options['dsn'], $options['username'], $options['password']);
     }
+
+    /**
+     * Convert between Zend_Cache's and Couchbase's idea of a document lifetime
+     *
+     * @param int $lifetime Zend_Cache lifetime
+     * @return int Couchbase's expiry
+     */
+    protected function convertLifetimeToExpiry($lifetime)
+    {
+        throw new BadMethodCallException('Not Implemented: ' . __METHOD__);
+    }
 }
