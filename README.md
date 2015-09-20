@@ -1,5 +1,9 @@
 # Couchbase Zend Cache Backend
 
+My primary goal is a fast distributed caching backend for applications like [Magento](http://magento.com/). Writes should be fast, reads faster. I'd like to take advantage of Couchbase features like [document expiration](http://docs.couchbase.com/developer/dev-guide-3.0/doc-expiration.html) when possible, rather than implementing them in PHP.
+
+I'm aware of [PSR-6](https://github.com/php-fig/fig-standards/blob/master/proposed/cache.md) and tracking it, but don't want to distract from the primary goal (at least until PSR-6 is accepted).
+
 Requires [php-couchbase](https://github.com/couchbaselabs/php-couchbase)
 
 Quick Notes:
