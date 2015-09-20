@@ -202,7 +202,7 @@ class KojiroMike_Couchbase_Cache implements Zend_Cache_Backend_ExtendedInterface
      */
     public function getIds()
     {
-        return $this->getIdsMatchingTags(['_all']);
+        return $this->getIdsMatchingAnyTags(['_all']);
     }
 
     /**
@@ -212,7 +212,7 @@ class KojiroMike_Couchbase_Cache implements Zend_Cache_Backend_ExtendedInterface
      */
     public function getTags()
     {
-        return $this->getIdsMatchingTags(['_tags']);
+        return $this->getIdsMatchingAnyTags(['_tags']);
     }
 
     /**
@@ -225,7 +225,7 @@ class KojiroMike_Couchbase_Cache implements Zend_Cache_Backend_ExtendedInterface
      */
     public function getIdsMatchingTags(array $tags = [])
     {
-        $ids = array_map([$this, 'getIdsMatchingAnyTag'], array_chunk($tags, 1));
+        $ids = array_map([$this, 'getIdsMatchingAnyTags'], array_chunk($tags, 1));
         return call_user_func_array('array_intersect', $ids);
     }
 
@@ -240,7 +240,7 @@ class KojiroMike_Couchbase_Cache implements Zend_Cache_Backend_ExtendedInterface
     public function getIdsNotMatchingTags(array $tags = [])
     {
         $bucket = $this->tagBucket;
-        return array_diff($this->getIds(), $this->getIdsMatchingTags($tags));
+        return array_diff($this->getIds(), $this->getIdsMatchingAnyTags($tags));
     }
 
     /**
