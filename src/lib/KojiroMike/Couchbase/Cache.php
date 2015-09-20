@@ -161,6 +161,7 @@ class KojiroMike_Couchbase_Cache implements Zend_Cache_Backend_ExtendedInterface
      * @return boolean True if no problem
      */
     public function remove($id) {
+        // CouchbaseBucket::remove actually takes an array of ids or a single id.
         $this->couchbase->remove($id);
         return true;
     }
