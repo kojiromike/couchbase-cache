@@ -298,7 +298,7 @@ class KojiroMike_Couchbase_Cache implements Zend_Cache_Backend_ExtendedInterface
      */
     public function touch($id, $extraLifetime)
     {
-        throw new BadMethodCallException('Not Implemented: ' . __METHOD__);
+        $this->couchbase->touch($id, $this->convertLifetimeToExpiry($extraLifetime));
     }
 
     /**
