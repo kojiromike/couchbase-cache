@@ -26,7 +26,7 @@ class KojiroMike_Couchbase_Cache implements Zend_Cache_Backend_ExtendedInterface
     const DOCUMENT_ID_DELIMITER = ' ';
 
     /** @var CouchbaseBucket */
-    protected $couchbase;
+    protected $cacheBucket;
     /** @var CouchbaseBucket */
     protected $tagBucket;
 
@@ -81,7 +81,7 @@ class KojiroMike_Couchbase_Cache implements Zend_Cache_Backend_ExtendedInterface
     {
         $options = array_merge($this->defaultOptions, $options);
         $couchbaseCluster = $this->getCluster($options);
-        $this->couchbase = $couchbaseCluster->openBucket($options['bucket'], $options['bucket_password']);
+        $this->cacheBucket = $couchbaseCluster->openBucket($options['bucket'], $options['bucket_password']);
         $this->tagBucket = $couchbaseCluster->openBucket($options['tag_bucket'], $options['tag_bucket_password']);
     }
 
@@ -107,9 +107,9 @@ class KojiroMike_Couchbase_Cache implements Zend_Cache_Backend_ExtendedInterface
      */
     public function load($id, $doNotTestCacheValidity = false)
     {
-        $couchbase = $this->couchbase;
+        $cacheBucket = $this->cacheBucket;
         try {
-            return $couchbase->get($id);
+            return $cacheBucket->get($id);
         } catch (CouchbaseNoSuchKeyException $e) {
             return false;
         }
@@ -142,13 +142,13 @@ class KojiroMike_Couchbase_Cache implements Zend_Cache_Backend_ExtendedInterface
      */
     public function save($data, $id, array $tags = [], $specificLifetime = false)
     {
-        $couchbase = $this->couchbase;
+        $cacheBucket = $this->cacheBucket;
         $options = [];
         if ($specificLifetime) {
             $options['expiry'] = $this->convertLifetimeToExpiry($specificLifetime);
         }
         $options['flags'] = self::COUCHBASE_FORMAT_FLAGS_RAW;
-        $couchbase->upsert($id, $data, $options);
+        $cacheBucket->upsert($id, $data, $options);
         $this->tagId($id, $tags);
         return true;
     }
@@ -162,7 +162,7 @@ class KojiroMike_Couchbase_Cache implements Zend_Cache_Backend_ExtendedInterface
      */
     public function remove($id) {
         // CouchbaseBucket::remove actually takes an array of ids or a single id.
-        $this->couchbase->remove($id);
+        $this->cacheBucket->remove($id);
         return true;
     }
 
@@ -298,7 +298,7 @@ class KojiroMike_Couchbase_Cache implements Zend_Cache_Backend_ExtendedInterface
      */
     public function touch($id, $extraLifetime)
     {
-        $this->couchbase->touch($id, $this->convertLifetimeToExpiry($extraLifetime));
+        $this->cacheBucket->touch($id, $this->convertLifetimeToExpiry($extraLifetime));
     }
 
     /**
@@ -328,7 +328,7 @@ class KojiroMike_Couchbase_Cache implements Zend_Cache_Backend_ExtendedInterface
      */
     protected function cleanAll()
     {
-        $this->couchbase->manager->flush();
+        $this->cacheBucket->manager->flush();
         $this->tagBucket->manager->flush();
         return true;
     }
@@ -354,7 +354,7 @@ class KojiroMike_Couchbase_Cache implements Zend_Cache_Backend_ExtendedInterface
     protected function cleanAllTags(array $tags = [])
     {
         $ids = $this->getIdsMatchingTags($tags);
-        $this->couchbase->remove($ids);
+        $this->cacheBucket->remove($ids);
         return true;
     }
 
@@ -368,7 +368,7 @@ class KojiroMike_Couchbase_Cache implements Zend_Cache_Backend_ExtendedInterface
     protected function cleanNotTags(array $tags = [])
     {
         $ids = $this->getIdsNotMatchingTags($tags);
-        $this->couchbase->remove($ids);
+        $this->cacheBucket->remove($ids);
         return true;
     }
 
@@ -382,7 +382,7 @@ class KojiroMike_Couchbase_Cache implements Zend_Cache_Backend_ExtendedInterface
     protected function cleanAnyTags(array $tags = [])
     {
         $ids = $this->getIdsMatchingAnyTags($tags);
-        $this->couchbase->remove($ids);
+        $this->cacheBucket->remove($ids);
         return true;
     }
 
