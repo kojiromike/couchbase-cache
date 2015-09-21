@@ -4,7 +4,7 @@ My primary goal is a fast distributed caching backend for applications like [Mag
 
 I'm aware of [PSR-6](https://github.com/php-fig/fig-standards/blob/master/proposed/cache.md) and tracking it, but don't want to distract from the primary goal (at least until PSR-6 is accepted).
 
-Requires [php-couchbase](https://github.com/couchbaselabs/php-couchbase)
+Requires [php-couchbase](https://github.com/couchbaselabs/php-couchbase). See tools/Dockerfile for one way to build that php extension.
 
 Quick Notes:
 
