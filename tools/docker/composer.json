@@ -1,0 +1,18 @@
+{
+    "name": "0/0",
+    "description": "",
+    "license": "MIT",
+    "repositories": [{"type": "composer", "url": "http://packages.firegento.com/"}],
+    "require": {
+        "magento-hackathon/magento-composer-installer": "^3.0",
+        "n98/magerun": "^1.97"
+    },
+    "require-dev": {
+        "composer/composer": "^1.0@alpha",
+        "pdepend/pdepend": "^2.2",
+        "phploc/phploc": "^2.1",
+        "phpmd/phpmd": "^2.2",
+        "sebastian/phpcpd": "^2.0",
+        "squizlabs/php_codesniffer": "^2.3"
+    }
+}
