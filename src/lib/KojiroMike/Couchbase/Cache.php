@@ -23,12 +23,15 @@ class KojiroMike_Couchbase_Cache implements Zend_Cache_Backend_ExtendedInterface
     const COUCHBASE_FORMAT_FLAGS_RAW = 50331648; // 0x03 << 24
     const COUCHBASE_FORMAT_FLAGS_PRIVATE = 16777216; // 0x01 << 24
 
-    const DOCUMENT_ID_DELIMITER = ' ';
+    /** @var CouchbaseBucket */
+    protected $bucket;
 
-    /** @var CouchbaseBucket */
-    protected $cacheBucket;
-    /** @var CouchbaseBucket */
-    protected $tagBucket;
+    /** @var int */
+    protected $lifetime;
+    /** @var bool */
+    protected $logging;
+    /** @var Zend_Log|null */
+    protected $logger;
 
     /**
      * @var array
@@ -46,6 +49,12 @@ class KojiroMike_Couchbase_Cache implements Zend_Cache_Backend_ExtendedInterface
         'get_list' => false,
     ];
 
+    protected $defaultDirectives = [
+        'lifetime' => 900,
+        'logger' => null,
+        'logging' => false,
+    ];
+
     /**
      * @var array
      *
@@ -55,7 +64,7 @@ class KojiroMike_Couchbase_Cache implements Zend_Cache_Backend_ExtendedInterface
         // An optional callable that takes a dsn, username and password and returns a CouchbaseCluster
         'cluster_factory' => null,
         // The dsn string to connect to the CouchbaseCluster
-        'dsn' => 'http://127.0.0.1/',
+        'dsn' => 'couchbase://127.0.0.1/',
         // The username to connect to the CouchbaseCluster
         'username' => '',
         // The password to connect to the CouchbaseCluster
@@ -64,12 +73,7 @@ class KojiroMike_Couchbase_Cache implements Zend_Cache_Backend_ExtendedInterface
         'bucket_name' => 'default',
         // The password to the CouchbaseBucket
         'bucket_password' => '',
-        // The name of the bucket to store the tag index in
-        'tag_bucket' => 'tags',
-        // The password to the tag index bucket
-        'tag_bucket_password' => '',
     ];
-
 
     /**
      * Construct Zend_Cache Couchbase Backend
@@ -80,9 +84,8 @@ class KojiroMike_Couchbase_Cache implements Zend_Cache_Backend_ExtendedInterface
     public function __construct(array $options = [])
     {
         $options = array_merge($this->defaultOptions, $options);
-        $couchbaseCluster = $this->getCluster($options);
-        $this->cacheBucket = $couchbaseCluster->openBucket($options['bucket'], $options['bucket_password']);
-        $this->tagBucket = $couchbaseCluster->openBucket($options['tag_bucket'], $options['tag_bucket_password']);
+        $bucket = $this->getBucket($options);
+        $this->bucket = $bucket;
     }
 
     /**
@@ -90,9 +93,17 @@ class KojiroMike_Couchbase_Cache implements Zend_Cache_Backend_ExtendedInterface
      *
      * @param array $directives assoc of directives
      */
-    public function setDirectives(array $directives = [])
+    public function setDirectives($directives = [])
     {
-        throw new BadMethodCallException('Not Implemented: ' . __METHOD__);
+        $directives = array_merge($this->defaultDirectives, (array) $directives);
+        $this->lifetime = (int) $directives['lifetime'];
+        $this->logging = (bool) $directives['logging'];
+        $this->setLogger($directives['logger']);
+    }
+
+    protected function setLogger(Zend_Log $logger = null)
+    {
+        $this->logger = $logger;
     }
 
     /**
@@ -107,12 +118,15 @@ class KojiroMike_Couchbase_Cache implements Zend_Cache_Backend_ExtendedInterface
      */
     public function load($id, $doNotTestCacheValidity = false)
     {
-        $cacheBucket = $this->cacheBucket;
+        $bucket = $this->bucket;
         try {
-            return $cacheBucket->get($id);
-        } catch (CouchbaseNoSuchKeyException $e) {
-            return false;
+            return $bucket->get($id);
+        } catch (CouchbaseException $e) {
+            if ($e->getMessage() !== 'The key does not exist on the server') {
+                throw $e;
+            }
         }
+        return false;
     }
 
     /**
@@ -123,8 +137,20 @@ class KojiroMike_Couchbase_Cache implements Zend_Cache_Backend_ExtendedInterface
      */
     public function test($id)
     {
-        throw new BadMethodCallException('Not Implemented: ' . __METHOD__);
-        // can't figure out how to get the actual expiration date from Couchbase.
+        // Not clear how to get the last modified timestamp from couchbase
+        // Also not clear what Zend expects if the document exists, but last modified time does not...
+        try {
+            $result = $this->bucket->get($id);
+            if ($result) {
+                // So for now, if the document exists, just return an integer. ¯\_(ツ)_/¯
+                return 1;
+            }
+        } catch (CouchbaseException $e) {
+            if ($e->getMessage() !== 'The key does not exist on the server') {
+                throw $e;
+            }
+        }
+        return false;
     }
 
     /**
@@ -140,15 +166,15 @@ class KojiroMike_Couchbase_Cache implements Zend_Cache_Backend_ExtendedInterface
      * @param  int   $specificLifetime If != false, set a specific lifetime for this cache record (null => infinite lifetime)
      * @return boolean true if no problem
      */
-    public function save($data, $id, array $tags = [], $specificLifetime = false)
+    public function save($data, $id, $tags = [], $specificLifetime = false)
     {
-        $cacheBucket = $this->cacheBucket;
+        $bucket = $this->bucket;
         $options = [];
         if ($specificLifetime) {
-            $options['expiry'] = $this->convertLifetimeToExpiry($specificLifetime);
+            $options['expiry'] = $this->getLifetime($specificLifetime);
         }
-        $options['flags'] = self::COUCHBASE_FORMAT_FLAGS_RAW;
-        $cacheBucket->upsert($id, $data, $options);
+        // $options['flags'] = self::COUCHBASE_FORMAT_FLAGS_RAW;
+        $bucket->upsert($id, $data, $options);
         $this->tagId($id, $tags);
         return true;
     }
@@ -162,7 +188,15 @@ class KojiroMike_Couchbase_Cache implements Zend_Cache_Backend_ExtendedInterface
      */
     public function remove($id) {
         // CouchbaseBucket::remove actually takes an array of ids or a single id.
-        $this->cacheBucket->remove($id);
+        $bucket = $this->bucket;
+        try {
+            $bucket->remove($id);
+        } catch (CouchbaseException $e) {
+            if ($e->getMessage() !== 'The key does not exist on the server') {
+                throw $e;
+            }
+            return false;
+        }
         return true;
     }
 
@@ -183,14 +217,15 @@ class KojiroMike_Couchbase_Cache implements Zend_Cache_Backend_ExtendedInterface
      * @param  array  $tags Array of tags
      * @return boolean true if no problem
      */
-    public function clean($mode = Zend_Cache::CLEANING_MODE_ALL, array $tags = [])
+    public function clean($mode = Zend_Cache::CLEANING_MODE_ALL, $tags = [])
     {
+        $tags = (array) $tags;
         switch($mode) {
             case Zend_Cache::CLEANING_MODE_ALL: return $this->cleanAll();
             case Zend_Cache::CLEANING_MODE_OLD: return $this->cleanExpired();
-            case Zend_Cache::CLEANING_MODE_MATCHING_TAG: return $this->cleanTags($tags);
+            case Zend_Cache::CLEANING_MODE_MATCHING_TAG: return $this->cleanAllTags($tags);
             case Zend_Cache::CLEANING_MODE_NOT_MATCHING_TAG: return $this->cleanOtherTags($tags);
-            case Zend_Cache::CLEANING_MODE_MATCHING_ANY_TAG: return $this->cleanAllTags();
+            case Zend_Cache::CLEANING_MODE_MATCHING_ANY_TAG: return $this->cleanAnyTags();
         }
         throw new BadMethodCallException('Unexpected parameters to ' . __METHOD__);
     }
@@ -223,7 +258,7 @@ class KojiroMike_Couchbase_Cache implements Zend_Cache_Backend_ExtendedInterface
      * @param array $tags array of tags
      * @return array array of matching cache ids (string)
      */
-    public function getIdsMatchingTags(array $tags = [])
+    public function getIdsMatchingTags($tags = [])
     {
         $ids = array_map([$this, 'getIdsMatchingAnyTags'], array_chunk($tags, 1));
         return call_user_func_array('array_intersect', $ids);
@@ -237,9 +272,9 @@ class KojiroMike_Couchbase_Cache implements Zend_Cache_Backend_ExtendedInterface
      * @param array $tags array of tags
      * @return array array of not matching cache ids (string)
      */
-    public function getIdsNotMatchingTags(array $tags = [])
+    public function getIdsNotMatchingTags($tags = [])
     {
-        $bucket = $this->tagBucket;
+        $bucket = $this->bucket;
         return array_diff($this->getIds(), $this->getIdsMatchingAnyTags($tags));
     }
 
@@ -251,9 +286,9 @@ class KojiroMike_Couchbase_Cache implements Zend_Cache_Backend_ExtendedInterface
      * @param array $tags array of tags
      * @return array array of any matching cache ids (string)
      */
-    public function getIdsMatchingAnyTags(array $tags = [])
+    public function getIdsMatchingAnyTags($tags = [])
     {
-        $bucket = $this->tagBucket;
+        $bucket = $this->bucket;
         $allIdsString = $bucket->get($tags);
         // Note: Given many reads, few writes
         // (When the time comes to deal with uniqueness)
@@ -298,7 +333,7 @@ class KojiroMike_Couchbase_Cache implements Zend_Cache_Backend_ExtendedInterface
      */
     public function touch($id, $extraLifetime)
     {
-        $this->cacheBucket->touch($id, $this->convertLifetimeToExpiry($extraLifetime));
+        $this->bucket->touch($id, $this->getLifetime($extraLifetime));
     }
 
     /**
@@ -328,8 +363,7 @@ class KojiroMike_Couchbase_Cache implements Zend_Cache_Backend_ExtendedInterface
      */
     protected function cleanAll()
     {
-        $this->cacheBucket->manager->flush();
-        $this->tagBucket->manager->flush();
+        $this->bucket->manager()->flush();
         return true;
     }
 
@@ -354,7 +388,7 @@ class KojiroMike_Couchbase_Cache implements Zend_Cache_Backend_ExtendedInterface
     protected function cleanAllTags(array $tags = [])
     {
         $ids = $this->getIdsMatchingTags($tags);
-        $this->cacheBucket->remove($ids);
+        $this->bucket->remove($ids);
         return true;
     }
 
@@ -368,7 +402,7 @@ class KojiroMike_Couchbase_Cache implements Zend_Cache_Backend_ExtendedInterface
     protected function cleanNotTags(array $tags = [])
     {
         $ids = $this->getIdsNotMatchingTags($tags);
-        $this->cacheBucket->remove($ids);
+        $this->bucket->remove($ids);
         return true;
     }
 
@@ -382,7 +416,7 @@ class KojiroMike_Couchbase_Cache implements Zend_Cache_Backend_ExtendedInterface
     protected function cleanAnyTags(array $tags = [])
     {
         $ids = $this->getIdsMatchingAnyTags($tags);
-        $this->cacheBucket->remove($ids);
+        $this->bucket->remove($ids);
         return true;
     }
 
@@ -396,13 +430,16 @@ class KojiroMike_Couchbase_Cache implements Zend_Cache_Backend_ExtendedInterface
      */
     protected function tagId($id, array $tags)
     {
-        $bucket = $this->tagBucket;
-        // Store the tag itself in the document for listing used tags.
-        $bucket->append('_tags', implode(self::DOCUMENT_ID_DELIMITER, $tags) . self::DOCUMENT_ID_DELIMITER);
-        $tags[] = '_all'; // Always add the id to the _all tag.
-        $bucket->append($tags, $id . self::DOCUMENT_ID_DELIMITER);
+        $doc = $this->load('_tags') ?: '{}';
+        $data = json_decode($tagDoc, true);
+        foreach($tags as $tag) {
+            $data[$tag][$id] = 1;
+        }
+        $bucket = $this->bucket;
+        $bucket->upsert('_tags', json_encode($data));
         return $this;
     }
+
 
     /**
      * Enable injecting the CouchbaseCluster implementation.
@@ -421,13 +458,41 @@ class KojiroMike_Couchbase_Cache implements Zend_Cache_Backend_ExtendedInterface
     }
 
     /**
-     * Convert between Zend_Cache's and Couchbase's idea of a document lifetime
+     * Enable creating the buckets on demand
      *
-     * @param int $lifetime Zend_Cache lifetime
-     * @return int Couchbase's expiry
+     * @param array $options
+     * @return CouchbaseBucket
      */
-    protected function convertLifetimeToExpiry($lifetime)
+    protected function getBucket(array $options = [])
     {
-        throw new BadMethodCallException('Not Implemented: ' . __METHOD__);
+        $cluster = $this->getCluster($options);
+        $bucket = $options['bucket'];
+        $password = $options['bucket_password'];
+        try {
+            return $cluster->openBucket($bucket, $password);
+        } catch (CouchbaseException $e) {
+            if ($e->getMessage() !== 'The bucket requested does not exist') {
+                throw $e;
+            }
+        }
+        $manager = $cluster->manager($options['username'], $options['password']);
+        return $manager->createBucket($bucket);
     }
+
+    /**
+     * Allow falling back to Zend_Cache_Backend global lifetime.
+     * However, if the lifetime is > 30 x 24 x 60 x 60 (the number
+     * of seconds in a month, couchbase expects a UNIX epoch timestamp.
+     * As long as you haven't time traveled to before February 1970,
+     * you might as well always use an epoch timestamp.
+     *
+     * @param int|bool TTL of the document, or false
+     * @return int the epoch timestamp + the TTL
+     */
+    public function getLifetime($specificLifetime = false)
+    {
+        $lifetime = time() + ($specificLifetime === false ? $this->_directives['lifetime'] : $specificLifetime);
+        return $lifetime;
+    }
+
 }
